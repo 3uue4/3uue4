@@ -4,8 +4,31 @@ const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 const fs = require('fs');
 const path = require('path');
-const connectDB = require('./database/db');
-const keepAlive = require('./server');
+const express = require('express');
+const mongoose = require('mongoose');
+
+// إنشاء خادم Express
+const server = express();
+server.all('/', (req, res) => {
+    res.send('Bot is running!');
+});
+
+function keepAlive() {
+    const port = process.env.PORT || 3000;
+    server.listen(port, () => {
+        console.log(`Server is ready on port ${port}.`);
+    });
+}
+
+// الاتصال بقاعدة البيانات
+async function connectDB() {
+    try {
+        await mongoose.connect(process.env.MONGODB_URI);
+        console.log('✅ تم الاتصال بقاعدة البيانات بنجاح!');
+    } catch (error) {
+        console.error('❌ فشل الاتصال بقاعدة البيانات:', error);
+    }
+}
 
 // إنشاء عميل Discord
 const client = new Client({
@@ -45,8 +68,7 @@ for (const file of commandFiles) {
 // دالة للاتصال بالقناة الصوتية
 async function connectToVoiceChannel() {
     try {
-        // استبدل 'SERVER_ID' و 'VOICE_CHANNEL_ID' بالقيم الصحيحة
-        const guild = await client.guilds.fetch(process.env.SERVER_ID);
+        const guild = await client.guilds.fetch(process.env.GUILD_ID);
         const channel = await guild.channels.fetch(process.env.VOICE_CHANNEL_ID);
         
         if (channel) {
@@ -65,15 +87,48 @@ async function connectToVoiceChannel() {
     }
 }
 
+// تسجيل دخول وخروج المستخدمين من القنوات الصوتية
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    const logChannel = await client.channels.fetch(process.env.LOG_CHANNEL_ID);
+    
+    if (!oldState.channelId && newState.channelId) {
+        // المستخدم انضم إلى قناة صوتية
+        logChannel.send({
+            embeds: [{
+                title: 'انضمام إلى قناة صوتية',
+                description: `${newState.member.user.tag} انضم إلى ${newState.channel.name}`,
+                color: 0x00ff00,
+                timestamp: new Date(),
+                thumbnail: {
+                    url: newState.member.user.displayAvatarURL({ dynamic: true })
+                }
+            }]
+        });
+    } else if (oldState.channelId && !newState.channelId) {
+        // المستخدم غادر قناة صوتية
+        logChannel.send({
+            embeds: [{
+                title: 'مغادرة قناة صوتية',
+                description: `${oldState.member.user.tag} غادر ${oldState.channel.name}`,
+                color: 0xff0000,
+                timestamp: new Date(),
+                thumbnail: {
+                    url: oldState.member.user.displayAvatarURL({ dynamic: true })
+                }
+            }]
+        });
+    }
+});
+
 // تسجيل دخول البوت
 client.once('ready', async () => {
     console.log(`✅ تم تسجيل دخول البوت باسم: ${client.user.tag}`);
     
     // تعيين حالة البوت
     client.user.setPresence({
-        status: 'dnd',
+        status: process.env.BOT_STATUS || 'dnd',
         activities: [{
-            name: 'old horizen',
+            name: process.env.BOT_ACTIVITY || 'Hollow Depth | نظام المساعدة',
             type: ActivityType.Streaming,
             url: 'https://twitch.tv/discord'
         }]
