@@ -11,67 +11,160 @@ const {
 } = require('discord.js');
 const Settings = require('../models/Settings');
 const logger = require('../utils/logger');
+const storage = require('../database/storage');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('embed')
-        .setDescription('إدارة الإمبدات')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        .setDescription('إدارة الإمبدات المخصصة')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('create')
+                .setDescription('إنشاء إمبد جديد')
+                .addStringOption(option =>
+                    option.setName('name')
+                        .setDescription('اسم الإمبد')
+                        .setRequired(true)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('show')
+                .setDescription('عرض إمبد في روم معين')
+                .addStringOption(option =>
+                    option.setName('name')
+                        .setDescription('اسم الإمبد')
+                        .setRequired(true))
+                .addChannelOption(option =>
+                    option.setName('channel')
+                        .setDescription('الروم المراد إرسال الإمبد فيه')
+                        .setRequired(true)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('delete')
+                .setDescription('حذف إمبد')
+                .addStringOption(option =>
+                    option.setName('name')
+                        .setDescription('اسم الإمبد')
+                        .setRequired(true))),
 
     async execute(interaction) {
-        if (!interaction.guild) {
-            return await interaction.reply({ 
-                content: '❌ هذا الأمر يمكن استخدامه فقط في السيرفر',
-                ephemeral: true 
-            });
-        }
+        const subcommand = interaction.options.getSubcommand();
 
-        try {
-            await interaction.deferReply({ ephemeral: true });
-
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return await interaction.editReply({
-                    content: '❌ عذراً، هذا الأمر متاح فقط للمشرفين',
+        if (subcommand === 'create') {
+            const name = interaction.options.getString('name');
+            
+            // التحقق من وجود الإمبد
+            const existingEmbed = storage.getEmbed(name);
+            if (existingEmbed) {
+                return interaction.reply({
+                    content: '❌ يوجد إمبد بهذا الاسم بالفعل!',
                     ephemeral: true
                 });
             }
 
-            const settings = await Settings.findOne({ guildId: interaction.guild.id }) || 
-                           new Settings({ guildId: interaction.guild.id });
+            // إنشاء إمبد جديد
+            const embed = new EmbedBuilder()
+                .setTitle('عنوان جديد')
+                .setDescription('وصف جديد')
+                .setColor('#2b2d31');
 
-            // Create buttons
+            // حفظ الإمبد
+            storage.saveEmbed(name, {
+                title: 'عنوان جديد',
+                description: 'وصف جديد',
+                color: '#2b2d31',
+                author: null,
+                authorIcon: null,
+                footer: null,
+                footerIcon: null,
+                thumbnail: null,
+                image: null
+            });
+
+            // إنشاء الأزرار
             const row = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId('create_embed')
-                        .setLabel('إنشاء إمبد جديد')
-                        .setStyle(ButtonStyle.Primary),
+                        .setCustomId(`embed_basic_${name}`)
+                        .setLabel('تعديل المعلومات الأساسية')
+                        .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
-                        .setCustomId('edit_embed')
-                        .setLabel('تعديل إمبد')
-                        .setStyle(ButtonStyle.Success),
+                        .setCustomId(`embed_author_${name}`)
+                        .setLabel('تعديل المؤلف')
+                        .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
-                        .setCustomId('preview_embed')
-                        .setLabel('معاينة الإمبد')
+                        .setCustomId(`embed_footer_${name}`)
+                        .setLabel('تعديل التذييل')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`embed_images_${name}`)
+                        .setLabel('تعديل الصور')
                         .setStyle(ButtonStyle.Secondary)
                 );
 
-            // Create embed
-            const embed = new EmbedBuilder()
-                .setTitle('إدارة الإمبدات')
-                .setDescription('استخدم الأزرار أدناه لإدارة الإمبدات')
-                .setColor('#0099ff');
-
-            await interaction.editReply({
+            await interaction.reply({
+                content: `✅ تم إنشاء إمبد باسم: ${name}\nيمكنك الآن استخدام \`{embed:${name}}\` في رسالة الترحيب أو الرد التلقائي`,
                 embeds: [embed],
-                components: [row],
+                components: [row]
+            });
+        }
+        else if (subcommand === 'show') {
+            const name = interaction.options.getString('name');
+            const channel = interaction.options.getChannel('channel');
+            
+            const embedData = storage.getEmbed(name);
+            if (!embedData) {
+                return interaction.reply({
+                    content: '❌ لم يتم العثور على إمبد بهذا الاسم!',
+                    ephemeral: true
+                });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(embedData.title)
+                .setDescription(embedData.description)
+                .setColor(embedData.color || '#2b2d31');
+
+            if (embedData.author) {
+                embed.setAuthor({ 
+                    name: embedData.author,
+                    iconURL: embedData.authorIcon
+                });
+            }
+
+            if (embedData.footer) {
+                embed.setFooter({
+                    text: embedData.footer,
+                    iconURL: embedData.footerIcon
+                });
+            }
+
+            if (embedData.thumbnail) {
+                embed.setThumbnail(embedData.thumbnail);
+            }
+
+            if (embedData.image) {
+                embed.setImage(embedData.image);
+            }
+
+            await channel.send({ embeds: [embed] });
+            await interaction.reply({
+                content: `✅ تم إرسال الإمبد إلى ${channel}`,
                 ephemeral: true
             });
+        }
+        else if (subcommand === 'delete') {
+            const name = interaction.options.getString('name');
+            
+            if (!storage.getEmbed(name)) {
+                return interaction.reply({
+                    content: '❌ لم يتم العثور على إمبد بهذا الاسم!',
+                    ephemeral: true
+                });
+            }
 
-        } catch (error) {
-            console.error('Error in embed command:', error);
-            await interaction.editReply({
-                content: '❌ حدث خطأ أثناء تنفيذ الأمر',
+            storage.deleteEmbed(name);
+            await interaction.reply({
+                content: `✅ تم حذف الإمبد: ${name}`,
                 ephemeral: true
             });
         }

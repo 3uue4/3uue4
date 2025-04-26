@@ -2,12 +2,14 @@ const mongoose = require('mongoose');
 
 async function connectToDatabase() {
     try {
-        // Remove duplicate w option from connection string if present
-        const connectionString = process.env.MONGODB_URI.replace(/[?&]w=[^&]+/g, '');
+        const connectionString = process.env.MONGODB_URI;
         
         await mongoose.connect(connectionString, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+            family: 4
         });
         
         console.log('✅ Connected to MongoDB successfully');
@@ -18,7 +20,7 @@ async function connectToDatabase() {
 
         mongoose.connection.on('disconnected', () => {
             console.log('MongoDB disconnected. Attempting to reconnect...');
-            connectToDatabase();
+            setTimeout(connectToDatabase, 5000);
         });
 
     } catch (error) {

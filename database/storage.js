@@ -1,47 +1,74 @@
 const fs = require('fs');
 const path = require('path');
 
-class Storage {
-    constructor() {
-        this.dataPath = path.join(__dirname, 'data.json');
-        this.data = this.loadData();
-    }
+// تأكد من وجود مجلد للتخزين
+const STORAGE_DIR = path.join(process.env.RENDER_STORAGE || './storage');
+const EMBEDS_FILE = path.join(STORAGE_DIR, 'embeds.json');
 
-    loadData() {
-        try {
-            if (fs.existsSync(this.dataPath)) {
-                return JSON.parse(fs.readFileSync(this.dataPath, 'utf8'));
-            }
-            return {};
-        } catch (error) {
-            console.error('خطأ في قراءة البيانات:', error);
-            return {};
-        }
-    }
+// إنشاء المجلد إذا لم يكن موجوداً
+if (!fs.existsSync(STORAGE_DIR)) {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+}
 
-    saveData() {
-        try {
-            fs.writeFileSync(this.dataPath, JSON.stringify(this.data, null, 2));
-            return true;
-        } catch (error) {
-            console.error('خطأ في حفظ البيانات:', error);
-            return false;
-        }
-    }
+// إنشاء ملف الإمبدات إذا لم يكن موجوداً
+if (!fs.existsSync(EMBEDS_FILE)) {
+    fs.writeFileSync(EMBEDS_FILE, '{}', 'utf8');
+}
 
-    set(key, value) {
-        this.data[key] = value;
-        return this.saveData();
-    }
-
-    get(key) {
-        return this.data[key];
-    }
-
-    delete(key) {
-        delete this.data[key];
-        return this.saveData();
+// قراءة الإمبدات
+function readEmbeds() {
+    try {
+        const data = fs.readFileSync(EMBEDS_FILE, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('Error reading embeds:', error);
+        return {};
     }
 }
 
-module.exports = new Storage(); 
+// حفظ الإمبدات
+function writeEmbeds(embeds) {
+    try {
+        fs.writeFileSync(EMBEDS_FILE, JSON.stringify(embeds, null, 2), 'utf8');
+    } catch (error) {
+        console.error('Error writing embeds:', error);
+    }
+}
+
+module.exports = {
+    // حفظ إمبد جديد
+    saveEmbed: function(name, embedData) {
+        const embeds = readEmbeds();
+        embeds[name] = embedData;
+        writeEmbeds(embeds);
+    },
+
+    // الحصول على إمبد
+    getEmbed: function(name) {
+        const embeds = readEmbeds();
+        return embeds[name];
+    },
+
+    // حذف إمبد
+    deleteEmbed: function(name) {
+        const embeds = readEmbeds();
+        delete embeds[name];
+        writeEmbeds(embeds);
+    },
+
+    // تحديث إمبد
+    updateEmbed: function(name, updates) {
+        const embeds = readEmbeds();
+        if (embeds[name]) {
+            embeds[name] = { ...embeds[name], ...updates };
+            writeEmbeds(embeds);
+            return true;
+        }
+        return false;
+    },
+
+    // الحصول على جميع الإمبدات
+    getAllEmbeds: function() {
+        return readEmbeds();
+    }
+}; 
