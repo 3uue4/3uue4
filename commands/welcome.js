@@ -1,160 +1,218 @@
 const { 
     SlashCommandBuilder, 
     PermissionFlagsBits,
-    ChannelType,
-    EmbedBuilder
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle,
+    EmbedBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-// وظيفة لتحميل إعدادات الترحيب
-function loadWelcomeSettings() {
-    const settingsPath = path.join(__dirname, '..', 'data', 'welcome.json');
-    if (!fs.existsSync(settingsPath)) {
-        const defaultSettings = {
-            enabled: false,
-            channelId: null,
-            embedName: null
-        };
-        fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 4));
-        return defaultSettings;
-    }
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-}
-
-// وظيفة لحفظ إعدادات الترحيب
-function saveWelcomeSettings(settings) {
-    const settingsPath = path.join(__dirname, '..', 'data', 'welcome.json');
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 4));
-}
-
-// وظيفة لتحميل الإيمبدات
-function loadEmbeds() {
-    const embedsPath = path.join(__dirname, '..', 'data', 'embeds.json');
-    if (!fs.existsSync(embedsPath)) {
-        return { embeds: {} };
-    }
-    return JSON.parse(fs.readFileSync(embedsPath, 'utf8'));
-}
+const Settings = require('../models/Settings');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('welcome')
-        .setDescription('إعدادات الترحيب')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('setup')
-                .setDescription('إعداد نظام الترحيب')
-                .addChannelOption(option =>
-                    option.setName('channel')
-                        .setDescription('روم الترحيب')
-                        .addChannelTypes(ChannelType.GuildText)
-                        .setRequired(true))
-                .addStringOption(option =>
-                    option.setName('embed')
-                        .setDescription('اسم الإيمبد المستخدم للترحيب')
-                        .setRequired(true)))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('test')
-                .setDescription('اختبار رسالة الترحيب'))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('disable')
-                .setDescription('تعطيل نظام الترحيب')),
+        .setDescription('إدارة رسالة الترحيب')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
-        const subcommand = interaction.options.getSubcommand();
-        const settings = loadWelcomeSettings();
+        if (!interaction.guild) {
+            return await interaction.reply({ 
+                content: '❌ هذا الأمر يمكن استخدامه فقط في السيرفر',
+                ephemeral: true 
+            });
+        }
 
-        switch (subcommand) {
-            case 'setup':
-                const channel = interaction.options.getChannel('channel');
-                const embedName = interaction.options.getString('embed');
-                
-                // التحقق من وجود الإيمبد
-                const embedData = loadEmbeds();
-                if (!embedData.embeds[embedName]) {
-                    return interaction.reply({
-                        content: '❌ الإيمبد المحدد غير موجود! الرجاء إنشاء الإيمبد أولاً باستخدام أمر `/embed create`',
-                        ephemeral: true
-                    });
-                }
+        try {
+            await interaction.deferReply({ ephemeral: true });
 
-                settings.enabled = true;
-                settings.channelId = channel.id;
-                settings.embedName = embedName;
-                saveWelcomeSettings(settings);
-
-                await interaction.reply({
-                    content: `✅ تم إعداد نظام الترحيب:\nروم الترحيب: ${channel}\nالإيمبد: \`${embedName}\`\n\nيمكنك اختبار الرسالة باستخدام \`/welcome test\``,
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.editReply({
+                    content: '❌ عذراً، هذا الأمر متاح فقط للمشرفين',
                     ephemeral: true
                 });
-                break;
+            }
 
-            case 'test':
-                if (!settings.enabled) {
-                    return interaction.reply({
-                        content: '❌ نظام الترحيب غير مفعل! قم بإعداده أولاً باستخدام `/welcome setup`',
-                        ephemeral: true
-                    });
-                }
+            const settings = await Settings.findOne({ guildId: interaction.guild.id }) || 
+                           new Settings({ guildId: interaction.guild.id });
 
-                const testChannel = interaction.guild.channels.cache.get(settings.channelId);
-                if (!testChannel) {
-                    return interaction.reply({
-                        content: '❌ لم يتم العثور على روم الترحيب! الرجاء إعادة إعداد النظام',
-                        ephemeral: true
-                    });
-                }
+            // Create buttons
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('edit_welcome')
+                        .setLabel('تعديل رسالة الترحيب')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('create_welcome')
+                        .setLabel('إنشاء رسالة ترحيب جديدة')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('preview_welcome')
+                        .setLabel('معاينة رسالة الترحيب')
+                        .setStyle(ButtonStyle.Secondary)
+                );
 
-                const embeds = loadEmbeds();
-                const welcomeEmbed = embeds.embeds[settings.embedName];
-                if (!welcomeEmbed) {
-                    return interaction.reply({
-                        content: '❌ لم يتم العثور على الإيمبد! الرجاء إعادة إعداد النظام',
-                        ephemeral: true
-                    });
-                }
+            // Create embed
+            const embed = new EmbedBuilder()
+                .setTitle('إدارة رسالة الترحيب')
+                .setDescription('استخدم الأزرار أدناه لإدارة رسالة الترحيب')
+                .setColor('#0099ff')
+                .addFields(
+                    { name: 'الحالة', value: settings.welcomeEnabled ? '✅ مفعل' : '❌ معطل' },
+                    { name: 'القناة', value: settings.welcomeChannel ? `<#${settings.welcomeChannel}>` : '❌ غير مضبوطة' }
+                );
 
-                const embed = new EmbedBuilder();
-                if (welcomeEmbed.title) embed.setTitle(welcomeEmbed.title);
-                if (welcomeEmbed.description) {
-                    const desc = welcomeEmbed.description
-                        .replace('{user}', interaction.user)
-                        .replace('{server}', interaction.guild.name)
-                        .replace('{memberCount}', interaction.guild.memberCount);
-                    embed.setDescription(desc);
-                }
-                if (welcomeEmbed.color) embed.setColor(welcomeEmbed.color);
-                if (welcomeEmbed.author.name) embed.setAuthor({
-                    name: welcomeEmbed.author.name,
-                    iconURL: welcomeEmbed.author.icon_url || null
-                });
-                if (welcomeEmbed.footer.text) embed.setFooter({
-                    text: welcomeEmbed.footer.text,
-                    iconURL: welcomeEmbed.footer.icon_url || null
-                });
-                if (welcomeEmbed.image.url) embed.setImage(welcomeEmbed.image.url);
-                if (welcomeEmbed.thumbnail.url) embed.setThumbnail(welcomeEmbed.thumbnail.url);
+            await interaction.editReply({
+                embeds: [embed],
+                components: [row],
+                ephemeral: true
+            });
 
-                await testChannel.send({ embeds: [embed] });
-                await interaction.reply({
-                    content: '✅ تم إرسال رسالة الترحيب التجريبية',
-                    ephemeral: true
-                });
-                break;
-
-            case 'disable':
-                settings.enabled = false;
-                saveWelcomeSettings(settings);
-
-                await interaction.reply({
-                    content: '✅ تم تعطيل نظام الترحيب',
-                    ephemeral: true
-                });
-                break;
+        } catch (error) {
+            console.error('Error in welcome command:', error);
+            await interaction.editReply({
+                content: '❌ حدث خطأ أثناء تنفيذ الأمر',
+                ephemeral: true
+            });
         }
     },
+
+    async handleButton(interaction) {
+        const settings = await Settings.findOne({ guildId: interaction.guild.id }) || 
+                        new Settings({ guildId: interaction.guild.id });
+
+        switch (interaction.customId) {
+            case 'edit_welcome': {
+                const modal = new ModalBuilder()
+                    .setCustomId('edit_welcome_modal')
+                    .setTitle('تعديل رسالة الترحيب');
+
+                const titleInput = new TextInputBuilder()
+                    .setCustomId('title')
+                    .setLabel('عنوان الرسالة')
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(settings.welcomeEmbed?.title || 'مرحباً بك في السيرفر!')
+                    .setRequired(true);
+
+                const descriptionInput = new TextInputBuilder()
+                    .setCustomId('description')
+                    .setLabel('وصف الرسالة')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setValue(settings.welcomeEmbed?.description || 'نتمنى لك وقتاً ممتعاً معنا!')
+                    .setRequired(true);
+
+                const colorInput = new TextInputBuilder()
+                    .setCustomId('color')
+                    .setLabel('لون الإمبد (Hex)')
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(settings.welcomeEmbed?.color || '#0099ff')
+                    .setRequired(true);
+
+                const firstActionRow = new ActionRowBuilder().addComponents(titleInput);
+                const secondActionRow = new ActionRowBuilder().addComponents(descriptionInput);
+                const thirdActionRow = new ActionRowBuilder().addComponents(colorInput);
+
+                modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
+                await interaction.showModal(modal);
+                break;
+            }
+
+            case 'create_welcome': {
+                const modal = new ModalBuilder()
+                    .setCustomId('create_welcome_modal')
+                    .setTitle('إنشاء رسالة ترحيب جديدة');
+
+                const titleInput = new TextInputBuilder()
+                    .setCustomId('title')
+                    .setLabel('عنوان الرسالة')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('مرحباً بك في السيرفر!')
+                    .setRequired(true);
+
+                const descriptionInput = new TextInputBuilder()
+                    .setCustomId('description')
+                    .setLabel('وصف الرسالة')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('نتمنى لك وقتاً ممتعاً معنا!')
+                    .setRequired(true);
+
+                const colorInput = new TextInputBuilder()
+                    .setCustomId('color')
+                    .setLabel('لون الإمبد (Hex)')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('#0099ff')
+                    .setRequired(true);
+
+                const firstActionRow = new ActionRowBuilder().addComponents(titleInput);
+                const secondActionRow = new ActionRowBuilder().addComponents(descriptionInput);
+                const thirdActionRow = new ActionRowBuilder().addComponents(colorInput);
+
+                modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
+                await interaction.showModal(modal);
+                break;
+            }
+
+            case 'preview_welcome': {
+                if (!settings.welcomeEmbed) {
+                    return await interaction.reply({
+                        content: '❌ لا توجد رسالة ترحيب مضبوطة',
+                        ephemeral: true
+                    });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle(settings.welcomeEmbed.title)
+                    .setDescription(settings.welcomeEmbed.description)
+                    .setColor(settings.welcomeEmbed.color)
+                    .setTimestamp();
+
+                await interaction.reply({
+                    content: 'معاينة رسالة الترحيب:',
+                    embeds: [embed],
+                    ephemeral: true
+                });
+                break;
+            }
+        }
+    },
+
+    async handleModal(interaction) {
+        const settings = await Settings.findOne({ guildId: interaction.guild.id }) || 
+                        new Settings({ guildId: interaction.guild.id });
+
+        const title = interaction.fields.getTextInputValue('title');
+        const description = interaction.fields.getTextInputValue('description');
+        const color = interaction.fields.getTextInputValue('color');
+
+        // Validate color
+        if (!/^#[0-9A-F]{6}$/i.test(color)) {
+            return await interaction.reply({
+                content: '❌ الرجاء إدخال لون صحيح بتنسيق Hex (مثال: #0099ff)',
+                ephemeral: true
+            });
+        }
+
+        settings.welcomeEmbed = {
+            title,
+            description,
+            color
+        };
+
+        await settings.save();
+
+        await interaction.reply({
+            content: '✅ تم حفظ إعدادات رسالة الترحيب بنجاح',
+            ephemeral: true
+        });
+
+        await logger.sendLog(interaction.client, {
+            title: '🔄 تحديث رسالة الترحيب',
+            description: `تم تحديث رسالة الترحيب بواسطة ${interaction.user}`,
+            color: 0x0099ff
+        });
+    }
 }; 

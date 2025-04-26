@@ -6,6 +6,24 @@ const settingsSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    welcomeEnabled: {
+        type: Boolean,
+        default: false
+    },
+    welcomeChannel: {
+        type: String
+    },
+    welcomeEmbed: {
+        title: {
+            type: String
+        },
+        description: {
+            type: String
+        },
+        color: {
+            type: String
+        }
+    },
     gifChannels: {
         type: [String],
         default: []

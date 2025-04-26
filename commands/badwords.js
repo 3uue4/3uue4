@@ -6,29 +6,34 @@ const {
 } = require('discord.js');
 const Settings = require('../models/Settings');
 const logger = require('../utils/logger');
+const BadWord = require('../models/BadWord');
+require('../utils/database'); // Ensure database connection is initialized
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('badwords')
         .setDescription('إدارة الكلمات المحظورة')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addSubcommand(subcommand =>
-            subcommand.setName('add')
+            subcommand
+                .setName('add')
                 .setDescription('إضافة كلمة محظورة')
                 .addStringOption(option =>
                     option.setName('word')
-                        .setDescription('الكلمة المحظورة')
+                        .setDescription('الكلمة المراد حظرها')
                         .setRequired(true)))
         .addSubcommand(subcommand =>
-            subcommand.setName('remove')
+            subcommand
+                .setName('remove')
                 .setDescription('إزالة كلمة محظورة')
                 .addStringOption(option =>
                     option.setName('word')
-                        .setDescription('الكلمة المحظورة')
+                        .setDescription('الكلمة المراد إزالة حظرها')
                         .setRequired(true)))
         .addSubcommand(subcommand =>
-            subcommand.setName('list')
-                .setDescription('عرض قائمة الكلمات المحظورة'))
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+            subcommand
+                .setName('list')
+                .setDescription('عرض قائمة الكلمات المحظورة')),
 
     async execute(interaction) {
         if (!interaction.guild) {
@@ -49,88 +54,99 @@ module.exports = {
             }
 
             const subcommand = interaction.options.getSubcommand();
-            const word = interaction.options.getString('word');
+            let settings = await Settings.findOne({ guildId: interaction.guild.id });
+
+            if (!settings) {
+                settings = new Settings({ guildId: interaction.guild.id });
+            }
 
             switch (subcommand) {
-                case 'add':
-                    // إضافة الكلمة المحظورة
-                    await interaction.editReply({
-                        content: `✅ تم إضافة الكلمة المحظورة: ${word}`,
-                        ephemeral: true
-                    });
-                    await logger.sendLog(interaction.client, {
-                        title: '➕ إضافة كلمة محظورة',
-                        description: `تم إضافة الكلمة المحظورة: ${word}\nبواسطة: ${interaction.user}`,
-                        color: 0xFF0000
-                    });
+                case 'add': {
+                    const word = interaction.options.getString('word').toLowerCase();
+                    
+                    try {
+                        await BadWord.create({
+                            guildId: interaction.guild.id,
+                            word: word,
+                            addedBy: interaction.user.id
+                        });
+                        
+                        await interaction.editReply({
+                            content: `✅ تمت إضافة الكلمة \`${word}\` إلى قائمة الكلمات المحظورة`,
+                            ephemeral: true
+                        });
+                        await logger.sendLog(interaction.client, {
+                            title: '➕ إضافة كلمة محظورة',
+                            description: `تم إضافة الكلمة المحظورة: ${word}\nبواسطة: ${interaction.user}`,
+                            color: 0xFF0000
+                        });
+                    } catch (error) {
+                        if (error.code === 11000) { // Duplicate key error
+                            await interaction.editReply({
+                                content: `❌ الكلمة \`${word}\` موجودة بالفعل في قائمة الكلمات المحظورة`,
+                                ephemeral: true
+                            });
+                        } else {
+                            throw error;
+                        }
+                    }
                     break;
+                }
 
-                case 'remove':
-                    // إزالة الكلمة المحظورة
-                    await interaction.editReply({
-                        content: `✅ تم إزالة الكلمة المحظورة: ${word}`,
-                        ephemeral: true
+                case 'remove': {
+                    const word = interaction.options.getString('word').toLowerCase();
+                    
+                    const result = await BadWord.findOneAndDelete({
+                        guildId: interaction.guild.id,
+                        word: word
                     });
-                    await logger.sendLog(interaction.client, {
-                        title: '➖ إزالة كلمة محظورة',
-                        description: `تم إزالة الكلمة المحظورة: ${word}\nبواسطة: ${interaction.user}`,
-                        color: 0x00FF00
-                    });
-                    break;
 
-                case 'list':
-                    // عرض قائمة الكلمات المحظورة مع قائمة اختيار
-                    const settings = await Settings.findOne({ guildId: interaction.guild.id });
-                    if (!settings || !settings.badWords || settings.badWords.length === 0) {
-                        return await interaction.editReply({
-                            content: '❌ لا توجد كلمات محظورة في السيرفر',
+                    if (result) {
+                        await interaction.editReply({
+                            content: `✅ تمت إزالة الكلمة \`${word}\` من قائمة الكلمات المحظورة`,
+                            ephemeral: true
+                        });
+                        await logger.sendLog(interaction.client, {
+                            title: '➖ إزالة كلمة محظورة',
+                            description: `تم إزالة الكلمة المحظورة: ${word}\nبواسطة: ${interaction.user}`,
+                            color: 0x00FF00
+                        });
+                    } else {
+                        await interaction.editReply({
+                            content: `❌ الكلمة \`${word}\` غير موجودة في قائمة الكلمات المحظورة`,
                             ephemeral: true
                         });
                     }
+                    break;
+                }
 
-                    const selectMenu = new StringSelectMenuBuilder()
-                        .setCustomId('badwords_list')
-                        .setPlaceholder('اختر كلمة محظورة لعرض تفاصيلها')
-                        .addOptions(
-                            settings.badWords.map(word => ({
-                                label: word,
-                                value: word,
-                                description: 'اضغط لعرض تفاصيل الكلمة'
-                            }))
-                        );
-
-                    const row = new ActionRowBuilder()
-                        .addComponents(selectMenu);
-
-                    await interaction.editReply({
-                        content: '📋 اختر كلمة محظورة لعرض تفاصيلها:',
-                        components: [row],
-                        ephemeral: true
-                    });
-
-                    // معالجة اختيار القائمة
-                    const filter = i => i.customId === 'badwords_list' && i.user.id === interaction.user.id;
-                    const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
-
-                    collector.on('collect', async i => {
-                        const selectedWord = i.values[0];
-                        await i.update({
-                            content: `📝 تفاصيل الكلمة المحظورة:\nالكلمة: ${selectedWord}\nتم إضافتها في: ${settings.badWordsAddedAt[selectedWord] || 'غير معروف'}`,
-                            components: [],
+                case 'list': {
+                    const badWords = await BadWord.find({ guildId: interaction.guild.id });
+                    
+                    if (badWords.length === 0) {
+                        await interaction.editReply({
+                            content: '📝 لا توجد كلمات محظورة في هذا السيرفر',
                             ephemeral: true
                         });
-                    });
-
-                    collector.on('end', collected => {
-                        if (collected.size === 0) {
-                            interaction.editReply({
-                                content: '⏱️ انتهت مهلة الاختيار',
-                                components: [],
+                    } else {
+                        const wordsList = badWords.map(bw => `\`${bw.word}\``).join(', ');
+                        try {
+                            await interaction.user.send({
+                                content: `📝 قائمة الكلمات المحظورة في السيرفر:\n${wordsList}`
+                            });
+                            await interaction.editReply({
+                                content: '✅ تم إرسال قائمة الكلمات المحظورة في الخاص',
+                                ephemeral: true
+                            });
+                        } catch (error) {
+                            await interaction.editReply({
+                                content: '❌ لم أتمكن من إرسال رسالة خاصة. الرجاء التأكد من فتح الرسائل الخاصة',
                                 ephemeral: true
                             });
                         }
-                    });
+                    }
                     break;
+                }
             }
         } catch (error) {
             console.error('Error in badwords command:', error);
