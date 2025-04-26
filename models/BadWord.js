@@ -1,13 +1,70 @@
-const mongoose = require('mongoose');
+const fs = require('fs-extra');
+const path = require('path');
 
-const badWordSchema = new mongoose.Schema({
-    guildId: { type: String, required: true },
-    word: { type: String, required: true },
-    addedBy: { type: String, required: true },
-    addedAt: { type: Date, default: Date.now }
-});
+const BAD_WORDS_FILE = path.join(__dirname, '..', 'data', 'badwords.json');
 
-// Compound index to ensure uniqueness of word per guild
-badWordSchema.index({ guildId: 1, word: 1 }, { unique: true });
+// إنشاء ملف الكلمات المحظورة إذا لم يكن موجوداً
+if (!fs.existsSync(BAD_WORDS_FILE)) {
+    fs.writeFileSync(BAD_WORDS_FILE, '{"badWords": []}', 'utf8');
+}
 
-module.exports = mongoose.model('BadWord', badWordSchema); 
+// قراءة الكلمات المحظورة
+function readBadWords() {
+    try {
+        const data = fs.readFileSync(BAD_WORDS_FILE, 'utf8');
+        return JSON.parse(data).badWords;
+    } catch (error) {
+        console.error('Error reading bad words:', error);
+        return [];
+    }
+}
+
+// حفظ الكلمات المحظورة
+function writeBadWords(badWords) {
+    try {
+        fs.writeFileSync(BAD_WORDS_FILE, JSON.stringify({ badWords }, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error('Error writing bad words:', error);
+        return false;
+    }
+}
+
+// إضافة كلمة محظورة
+function addBadWord(word) {
+    const badWords = readBadWords();
+    if (!badWords.includes(word)) {
+        badWords.push(word);
+        return writeBadWords(badWords);
+    }
+    return false;
+}
+
+// حذف كلمة محظورة
+function removeBadWord(word) {
+    const badWords = readBadWords();
+    const index = badWords.indexOf(word);
+    if (index !== -1) {
+        badWords.splice(index, 1);
+        return writeBadWords(badWords);
+    }
+    return false;
+}
+
+// التحقق من وجود كلمة محظورة
+function isBadWord(word) {
+    const badWords = readBadWords();
+    return badWords.includes(word);
+}
+
+// الحصول على جميع الكلمات المحظورة
+function getAllBadWords() {
+    return readBadWords();
+}
+
+module.exports = {
+    addBadWord,
+    removeBadWord,
+    isBadWord,
+    getAllBadWords
+}; 
