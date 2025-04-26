@@ -37,17 +37,17 @@ module.exports = {
         if (!interaction.guild) {
             return await interaction.reply({ 
                 content: '❌ هذا الأمر يمكن استخدامه فقط في السيرفر',
-                ephemeral: true 
+                flags: 64 // ephemeral
             });
         }
 
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: 64 }); // ephemeral
 
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return await interaction.editReply({
                     content: '❌ عذراً، هذا الأمر متاح فقط للمشرفين',
-                    ephemeral: true
+                    flags: 64 // ephemeral
                 });
             }
 
@@ -59,7 +59,7 @@ module.exports = {
                     if (addBadWord(word)) {
                         await interaction.editReply({
                             content: `✅ تمت إضافة الكلمة "${word}" إلى قائمة الكلمات المحظورة`,
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                         await logger.sendLog(interaction.client, {
                             title: '➕ إضافة كلمة محظورة',
@@ -69,7 +69,7 @@ module.exports = {
                     } else {
                         await interaction.editReply({
                             content: `❌ الكلمة "${word}" موجودة بالفعل في قائمة الكلمات المحظورة`,
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                     }
                     break;
@@ -78,7 +78,7 @@ module.exports = {
                     if (removeBadWord(word)) {
                         await interaction.editReply({
                             content: `✅ تمت إزالة الكلمة "${word}" من قائمة الكلمات المحظورة`,
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                         await logger.sendLog(interaction.client, {
                             title: '➖ إزالة كلمة محظورة',
@@ -88,7 +88,7 @@ module.exports = {
                     } else {
                         await interaction.editReply({
                             content: `❌ الكلمة "${word}" غير موجودة في قائمة الكلمات المحظورة`,
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                     }
                     break;
@@ -98,12 +98,12 @@ module.exports = {
                     if (badWords.length === 0) {
                         await interaction.editReply({
                             content: '❌ لا توجد كلمات محظورة حالياً',
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                     } else {
                         await interaction.editReply({
                             content: `📝 قائمة الكلمات المحظورة:\n${badWords.map(word => `- ${word}`).join('\n')}`,
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                     }
                     break;
@@ -113,12 +113,12 @@ module.exports = {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: '❌ حدث خطأ أثناء تنفيذ الأمر',
-                    ephemeral: true
+                    flags: 64 // ephemeral
                 });
             } else {
                 await interaction.editReply({
                     content: '❌ حدث خطأ أثناء تنفيذ الأمر',
-                    ephemeral: true
+                    flags: 64 // ephemeral
                 });
             }
         }

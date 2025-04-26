@@ -11,8 +11,73 @@ const {
     TextInputBuilder,
     TextInputStyle
 } = require('discord.js');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
+
+// مسار ملف التذاكر
+const TICKETS_FILE = path.join(__dirname, '..', 'data', 'tickets.json');
+
+// إنشاء ملف التذاكر إذا لم يكن موجوداً
+if (!fs.existsSync(TICKETS_FILE)) {
+    fs.writeFileSync(TICKETS_FILE, '{"tickets": []}', 'utf8');
+}
+
+// قراءة التذاكر
+function readTickets() {
+    try {
+        const data = fs.readFileSync(TICKETS_FILE, 'utf8');
+        return JSON.parse(data).tickets;
+    } catch (error) {
+        console.error('Error reading tickets:', error);
+        return [];
+    }
+}
+
+// حفظ التذاكر
+function writeTickets(tickets) {
+    try {
+        fs.writeFileSync(TICKETS_FILE, JSON.stringify({ tickets }, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error('Error writing tickets:', error);
+        return false;
+    }
+}
+
+// إضافة تذكرة
+function addTicket(ticket) {
+    const tickets = readTickets();
+    tickets.push(ticket);
+    return writeTickets(tickets);
+}
+
+// حذف تذكرة
+function removeTicket(ticketId) {
+    const tickets = readTickets();
+    const index = tickets.findIndex(t => t.id === ticketId);
+    if (index !== -1) {
+        tickets.splice(index, 1);
+        return writeTickets(tickets);
+    }
+    return false;
+}
+
+// الحصول على تذكرة
+function getTicket(ticketId) {
+    const tickets = readTickets();
+    return tickets.find(t => t.id === ticketId);
+}
+
+// تحديث تذكرة
+function updateTicket(ticketId, updates) {
+    const tickets = readTickets();
+    const index = tickets.findIndex(t => t.id === ticketId);
+    if (index !== -1) {
+        tickets[index] = { ...tickets[index], ...updates };
+        return writeTickets(tickets);
+    }
+    return false;
+}
 
 // قراءة ملف التكوين
 function getConfig() {
