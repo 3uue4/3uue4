@@ -67,18 +67,8 @@ module.exports = {
                 .setDescription('وصف جديد')
                 .setColor('#2b2d31');
 
-            // حفظ الإمبد
-            storage.saveEmbed(name, {
-                title: 'عنوان جديد',
-                description: 'وصف جديد',
-                color: '#2b2d31',
-                author: null,
-                authorIcon: null,
-                footer: null,
-                footerIcon: null,
-                thumbnail: null,
-                image: null
-            });
+            // حفظ الإمبد في قاعدة البيانات
+            storage.saveEmbed(name, embed);
 
             // إنشاء الأزرار
             const row = new ActionRowBuilder()

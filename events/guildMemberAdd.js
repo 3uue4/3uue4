@@ -1,6 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const Settings = require('../models/Settings');
+const logger = require('../utils/logger');
 
 // وظيفة لتحميل إعدادات الترحيب
 function loadWelcomeSettings() {
@@ -23,43 +25,68 @@ function loadEmbeds() {
 module.exports = {
     name: 'guildMemberAdd',
     async execute(member) {
-        const settings = loadWelcomeSettings();
-        
-        // التحقق من تفعيل نظام الترحيب
-        if (!settings.enabled || !settings.channelId || !settings.embedName) return;
+        try {
+            const settings = await Settings.findOne({ guildId: member.guild.id });
+            if (!settings || !settings.autoRole) return;
 
-        // الحصول على روم الترحيب
-        const welcomeChannel = member.guild.channels.cache.get(settings.channelId);
-        if (!welcomeChannel) return;
+            const role = member.guild.roles.cache.get(settings.autoRole);
+            if (!role) {
+                settings.autoRole = null;
+                await settings.save();
+                return;
+            }
 
-        // الحصول على الإيمبد
-        const embedData = loadEmbeds();
-        const welcomeEmbed = embedData.embeds[settings.embedName];
-        if (!welcomeEmbed) return;
+            await member.roles.add(role);
+            
+            // إنشاء إمبد الترحيب
+            const welcomeEmbed = new EmbedBuilder()
+                .setTitle(`Welcome ${member.user.username} ♡︎`)
+                .setDescription(`
+┌─────────────────────────────────────────────────┐
+│         Welcome to Old Horizon Community       │
+└─────────────────────────────────────────────────┘
 
-        // إنشاء الإيمبد
-        const embed = new EmbedBuilder();
-        if (welcomeEmbed.title) embed.setTitle(welcomeEmbed.title);
-        if (welcomeEmbed.description) {
-            const desc = welcomeEmbed.description
-                .replace('{user}', member.user)
-                .replace('{server}', member.guild.name)
-                .replace('{memberCount}', member.guild.memberCount);
-            embed.setDescription(desc);
+  A realm of avatars, epic game nights, and true camaraderie.
+
+  • Customize your [avatar](https://discord.com/channels/1281429066339188786/1361772504141533387) and shape your legend.
+  • Participate in exclusive game nights and community challenges.
+  • Connect and [celebrate](https://discord.com/channels/1281429066339188786/1361848754273124611) with fellow adventurers.
+
+  You did not simply join…  
+  You claimed your place in the greatest guild.
+
+───────────────────────────────────────────────────
+                `)
+                .setImage('https://media.wickdev.me/a61784123b.gif')
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 1024 }))
+                .setAuthor({
+                    name: member.guild.name,
+                    iconURL: member.guild.iconURL({ dynamic: true, size: 1024 })
+                })
+                .setFooter({
+                    text: member.guild.name,
+                    iconURL: member.guild.iconURL({ dynamic: true, size: 1024 })
+                })
+                .setColor('#2b2d31');
+
+            // إرسال رسالة الترحيب
+            const welcomeChannel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
+            if (welcomeChannel) {
+                await welcomeChannel.send({ embeds: [welcomeEmbed] });
+            }
+
+            await logger.sendLog(member.client, {
+                title: '👋 عضو جديد',
+                description: `${member} انضم إلى السيرفر وحصل على الرتبة ${role}`,
+                color: 0x00ff00
+            });
+        } catch (error) {
+            console.error('Error in guildMemberAdd event:', error);
+            await logger.sendLog(member.client, {
+                title: '❌ خطأ في إضافة الرتبة التلقائية',
+                description: `حدث خطأ أثناء محاولة إضافة الرتبة لعضو جديد: ${error.message}`,
+                color: 0xff0000
+            });
         }
-        if (welcomeEmbed.color) embed.setColor(welcomeEmbed.color);
-        if (welcomeEmbed.author.name) embed.setAuthor({
-            name: welcomeEmbed.author.name,
-            iconURL: welcomeEmbed.author.icon_url || null
-        });
-        if (welcomeEmbed.footer.text) embed.setFooter({
-            text: welcomeEmbed.footer.text,
-            iconURL: welcomeEmbed.footer.icon_url || null
-        });
-        if (welcomeEmbed.image.url) embed.setImage(welcomeEmbed.image.url);
-        if (welcomeEmbed.thumbnail.url) embed.setThumbnail(welcomeEmbed.thumbnail.url);
-
-        // إرسال رسالة الترحيب
-        await welcomeChannel.send({ embeds: [embed] });
     },
 }; 

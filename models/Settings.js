@@ -1,61 +1,44 @@
-const mongoose = require('mongoose');
+const storage = require('../database/storage');
 
-const settingsSchema = new mongoose.Schema({
-    guildId: {
-        type: String,
-        required: true,
-        unique: true
-    },
-    welcomeEnabled: {
-        type: Boolean,
-        default: false
-    },
-    welcomeChannel: {
-        type: String
-    },
-    welcomeEmbed: {
-        title: {
-            type: String
-        },
-        description: {
-            type: String
-        },
-        color: {
-            type: String
-        }
-    },
-    embeds: [{
-        title: {
-            type: String,
-            required: true
-        },
-        description: {
-            type: String,
-            required: true
-        },
-        color: {
-            type: String,
-            required: true
-        }
-    }],
-    gifChannels: {
-        type: [String],
-        default: []
-    },
-    reactionChannels: {
-        type: Map,
-        of: String,
-        default: {}
-    },
-    autoReplies: {
-        type: Map,
-        of: String,
-        default: {}
-    },
-    badWords: {
-        type: [String],
-        default: []
+class Settings {
+    constructor(guildId) {
+        this.guildId = guildId;
+        this.autoRole = null;
+        this.welcomeEnabled = false;
+        this.welcomeChannel = null;
+        this.welcomeEmbed = {
+            title: null,
+            description: null,
+            color: null
+        };
+        this.embeds = [];
+        this.gifChannels = [];
+        this.reactionChannels = new Map();
+        this.autoReplies = new Map();
+        this.badWords = [];
     }
-});
 
-module.exports = mongoose.model('Settings', settingsSchema); 
+    static async findOne({ guildId }) {
+        const settings = await storage.getSettings(guildId);
+        if (!settings) return null;
+        return new Settings(guildId, settings);
+    }
+
+    async save() {
+        const settings = {
+            guildId: this.guildId,
+            autoRole: this.autoRole,
+            welcomeEnabled: this.welcomeEnabled,
+            welcomeChannel: this.welcomeChannel,
+            welcomeEmbed: this.welcomeEmbed,
+            embeds: this.embeds,
+            gifChannels: this.gifChannels,
+            reactionChannels: Object.fromEntries(this.reactionChannels),
+            autoReplies: Object.fromEntries(this.autoReplies),
+            badWords: this.badWords
+        };
+        return await storage.saveSettings(this.guildId, settings);
+    }
+}
+
+module.exports = Settings; 
