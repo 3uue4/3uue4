@@ -1,99 +1,156 @@
 const { 
     SlashCommandBuilder, 
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    ActionRowBuilder,
+    StringSelectMenuBuilder
 } = require('discord.js');
 const Settings = require('../models/Settings');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('autoreply')
         .setDescription('إدارة الردود التلقائية')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('add')
+            subcommand.setName('add')
                 .setDescription('إضافة رد تلقائي')
                 .addStringOption(option =>
                     option.setName('trigger')
-                        .setDescription('الكلمة التي سيتم الرد عليها')
+                        .setDescription('الكلمة التي ستشغل الرد')
                         .setRequired(true))
                 .addStringOption(option =>
                     option.setName('response')
-                        .setDescription('الرد الذي سيتم إرساله')
+                        .setDescription('الرد التلقائي')
                         .setRequired(true)))
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('remove')
+            subcommand.setName('remove')
                 .setDescription('إزالة رد تلقائي')
                 .addStringOption(option =>
                     option.setName('trigger')
-                        .setDescription('الكلمة المراد إزالتها')
+                        .setDescription('الكلمة التي تشغل الرد')
                         .setRequired(true)))
         .addSubcommand(subcommand =>
-            subcommand
-                .setName('list')
-                .setDescription('عرض قائمة الردود التلقائية')),
+            subcommand.setName('list')
+                .setDescription('عرض قائمة الردود التلقائية'))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
-        const subcommand = interaction.options.getSubcommand();
-        let settings = await Settings.findOne({ guildId: interaction.guild.id });
-        
-        if (!settings) {
-            settings = new Settings({ guildId: interaction.guild.id });
+        if (!interaction.guild) {
+            return await interaction.reply({ 
+                content: '❌ هذا الأمر يمكن استخدامه فقط في السيرفر',
+                ephemeral: true 
+            });
         }
 
-        switch (subcommand) {
-            case 'add':
-                const trigger = interaction.options.getString('trigger').toLowerCase();
-                const response = interaction.options.getString('response');
+        try {
+            await interaction.deferReply({ ephemeral: true });
 
-                settings.autoReplies.set(trigger, response);
-                await settings.save();
-                
-                await interaction.reply({
-                    content: `✅ تم إضافة رد تلقائي جديد\nالكلمة: ${trigger}\nالرد: ${response}`,
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return await interaction.editReply({
+                    content: '❌ عذراً، هذا الأمر متاح فقط للمشرفين',
                     ephemeral: true
                 });
-                break;
+            }
 
-            case 'remove':
-                const removeTrigger = interaction.options.getString('trigger').toLowerCase();
-                
-                if (!settings.autoReplies.has(removeTrigger)) {
-                    return interaction.reply({
-                        content: '❌ هذه الكلمة غير موجودة في قائمة الردود التلقائية!',
+            const subcommand = interaction.options.getSubcommand();
+            const trigger = interaction.options.getString('trigger');
+            const response = interaction.options.getString('response');
+
+            switch (subcommand) {
+                case 'add':
+                    // إضافة رد تلقائي
+                    await interaction.editReply({
+                        content: `✅ تم إضافة الرد التلقائي:\nالكلمة: ${trigger}\nالرد: ${response}`,
                         ephemeral: true
                     });
-                }
+                    await logger.sendLog(interaction.client, {
+                        title: '➕ إضافة رد تلقائي',
+                        description: `تم إضافة رد تلقائي جديد\nالكلمة: ${trigger}\nالرد: ${response}\nبواسطة: ${interaction.user}`,
+                        color: 0x00FF00
+                    });
+                    break;
 
-                settings.autoReplies.delete(removeTrigger);
-                await settings.save();
-
-                await interaction.reply({
-                    content: `✅ تم إزالة الرد التلقائي للكلمة: ${removeTrigger}`,
-                    ephemeral: true
-                });
-                break;
-
-            case 'list':
-                const autoReplies = Array.from(settings.autoReplies.entries());
-                
-                if (autoReplies.length === 0) {
-                    return interaction.reply({
-                        content: '❌ لا توجد ردود تلقائية مضافة!',
+                case 'remove':
+                    // إزالة رد تلقائي
+                    await interaction.editReply({
+                        content: `✅ تم إزالة الرد التلقائي للكلمة: ${trigger}`,
                         ephemeral: true
                     });
-                }
+                    await logger.sendLog(interaction.client, {
+                        title: '➖ إزالة رد تلقائي',
+                        description: `تم إزالة الرد التلقائي للكلمة: ${trigger}\nبواسطة: ${interaction.user}`,
+                        color: 0xFF0000
+                    });
+                    break;
 
-                const replyList = autoReplies
-                    .map(([trigger, response]) => `**${trigger}** → ${response}`)
-                    .join('\n');
+                case 'list':
+                    // عرض قائمة الردود التلقائية مع قائمة اختيار
+                    const settings = await Settings.findOne({ guildId: interaction.guild.id });
+                    if (!settings || !settings.autoReplies || Object.keys(settings.autoReplies).length === 0) {
+                        return await interaction.editReply({
+                            content: '❌ لا توجد ردود تلقائية في السيرفر',
+                            ephemeral: true
+                        });
+                    }
 
+                    const selectMenu = new StringSelectMenuBuilder()
+                        .setCustomId('autoreplies_list')
+                        .setPlaceholder('اختر رد تلقائي لعرض تفاصيله')
+                        .addOptions(
+                            Object.entries(settings.autoReplies).map(([trigger, response]) => ({
+                                label: trigger,
+                                value: trigger,
+                                description: response.substring(0, 50) + (response.length > 50 ? '...' : '')
+                            }))
+                        );
+
+                    const row = new ActionRowBuilder()
+                        .addComponents(selectMenu);
+
+                    await interaction.editReply({
+                        content: '📋 اختر رد تلقائي لعرض تفاصيله:',
+                        components: [row],
+                        ephemeral: true
+                    });
+
+                    // معالجة اختيار القائمة
+                    const filter = i => i.customId === 'autoreplies_list' && i.user.id === interaction.user.id;
+                    const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
+
+                    collector.on('collect', async i => {
+                        const selectedTrigger = i.values[0];
+                        const selectedResponse = settings.autoReplies[selectedTrigger];
+                        await i.update({
+                            content: `📝 تفاصيل الرد التلقائي:\nالكلمة: ${selectedTrigger}\nالرد: ${selectedResponse}\nتم إضافته في: ${settings.autoRepliesAddedAt[selectedTrigger] || 'غير معروف'}`,
+                            components: [],
+                            ephemeral: true
+                        });
+                    });
+
+                    collector.on('end', collected => {
+                        if (collected.size === 0) {
+                            interaction.editReply({
+                                content: '⏱️ انتهت مهلة الاختيار',
+                                components: [],
+                                ephemeral: true
+                            });
+                        }
+                    });
+                    break;
+            }
+        } catch (error) {
+            console.error('Error in autoreply command:', error);
+            if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
-                    content: `📋 قائمة الردود التلقائية:\n${replyList}`,
+                    content: '❌ حدث خطأ أثناء تنفيذ الأمر',
                     ephemeral: true
                 });
-                break;
+            } else {
+                await interaction.editReply({
+                    content: '❌ حدث خطأ أثناء تنفيذ الأمر',
+                    ephemeral: true
+                });
+            }
         }
     },
 }; 
