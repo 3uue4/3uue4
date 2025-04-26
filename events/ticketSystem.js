@@ -97,7 +97,7 @@ function getUserIdFromChannelName(channelName) {
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction) {
-        if (!interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isUserSelect() && !interaction.isModalSubmit()) return;
+        if (!interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isModalSubmit()) return;
 
         const config = getConfig();
         const isAdmin = interaction.member.roles.cache.has(config.adminRoleId);
@@ -111,7 +111,7 @@ module.exports = {
             if (existingTicket) {
                 return interaction.reply({
                     content: '❌ لديك تذكرة مفتوحة بالفعل!',
-                    ephemeral: true
+                    flags: 64 // ephemeral
                 });
             }
 
@@ -195,7 +195,7 @@ module.exports = {
 
             await interaction.reply({
                 content: `✅ تم إنشاء تذكرتك في ${ticketChannel}`,
-                ephemeral: true
+                flags: 64 // ephemeral
             });
         }
 
@@ -208,7 +208,7 @@ module.exports = {
                     if (!isAdmin) {
                         return interaction.reply({
                             content: '❌ هذا الخيار متاح فقط للإدارة',
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                     }
                     const userSelect = new UserSelectMenuBuilder()
@@ -221,7 +221,7 @@ module.exports = {
                     await interaction.reply({
                         content: 'اختر العضو الذي تريد إضافته للتذكرة:',
                         components: [userSelectRow],
-                        ephemeral: true
+                        flags: 64 // ephemeral
                     });
                     break;
 
@@ -229,7 +229,7 @@ module.exports = {
                     if (!isAdmin) {
                         return interaction.reply({
                             content: '❌ هذا الخيار متاح فقط للإدارة',
-                            ephemeral: true
+                            flags: 64 // ephemeral
                         });
                     }
                     const modal = new ModalBuilder()
@@ -273,7 +273,7 @@ module.exports = {
 
             await interaction.reply({
                 content: `✅ تم إضافة ${selectedUser} إلى التذكرة`,
-                ephemeral: true
+                flags: 64 // ephemeral
             });
         }
 
@@ -319,13 +319,13 @@ module.exports = {
             if (!isAdmin) {
                 return interaction.reply({
                     content: '❌ هذا الخيار متاح فقط للإدارة',
-                    ephemeral: true
+                    flags: 64 // ephemeral
                 });
             }
 
             await interaction.reply({ 
                 content: '⚠️ جاري حذف التذكرة...',
-                ephemeral: true 
+                flags: 64 // ephemeral
             });
             
             setTimeout(() => interaction.channel.delete(), 5000);
