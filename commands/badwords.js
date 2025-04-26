@@ -6,7 +6,6 @@ const {
 } = require('discord.js');
 const { addBadWord, removeBadWord, getAllBadWords } = require('../models/BadWord');
 const logger = require('../utils/logger');
-require('../utils/database'); // Ensure database connection is initialized
 
 module.exports = {
     data: new SlashCommandBuilder()

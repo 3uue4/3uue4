@@ -1,32 +1,26 @@
-const mongoose = require('mongoose');
+const fs = require('fs-extra');
+const path = require('path');
 
+// مسار مجلد التخزين
+const STORAGE_DIR = path.join(__dirname, '..', 'data');
+
+// إنشاء مجلد التخزين إذا لم يكن موجوداً
+if (!fs.existsSync(STORAGE_DIR)) {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+}
+
+// دالة للتحقق من اتصال التخزين
 async function connectToDatabase() {
     try {
-        const connectionString = process.env.MONGODB_URI;
-        
-        await mongoose.connect(connectionString, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000,
-            family: 4
-        });
-        
-        console.log('✅ Connected to MongoDB successfully');
-        
-        mongoose.connection.on('error', (err) => {
-            console.error('MongoDB connection error:', err);
-        });
-
-        mongoose.connection.on('disconnected', () => {
-            console.log('MongoDB disconnected. Attempting to reconnect...');
-            setTimeout(connectToDatabase, 5000);
-        });
-
+        // التحقق من وجود مجلد التخزين
+        if (!fs.existsSync(STORAGE_DIR)) {
+            fs.mkdirSync(STORAGE_DIR, { recursive: true });
+        }
+        console.log('✅ تم الاتصال بنظام التخزين المحلي بنجاح!');
+        return true;
     } catch (error) {
-        console.error('Failed to connect to MongoDB:', error);
-        // Retry connection after 5 seconds
-        setTimeout(connectToDatabase, 5000);
+        console.error('❌ فشل الاتصال بنظام التخزين المحلي:', error);
+        return false;
     }
 }
 
