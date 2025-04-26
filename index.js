@@ -3,21 +3,9 @@ const { Client, GatewayIntentBits, Collection, ActivityType, Partials } = requir
 const { joinVoiceChannel } = require('@discordjs/voice');
 const fs = require('fs');
 const path = require('path');
-const mongoose = require('mongoose');
 const keepAlive = require('./utils/keepAlive');
-const connectToDatabase = require('./utils/database');
 const logger = require('./utils/logger');
 const storage = require('./database/storage');
-
-// الاتصال بقاعدة البيانات
-async function connectDB() {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('✅ تم الاتصال بقاعدة البيانات بنجاح!');
-    } catch (error) {
-        console.error('❌ فشل الاتصال بقاعدة البيانات:', error);
-    }
-}
 
 // إنشاء عميل Discord جديد
 const client = new Client({
@@ -127,7 +115,6 @@ client.once('ready', async () => {
     
     // الاتصال بالقناة الصوتية بعد تسجيل الدخول
     await connectToVoiceChannel();
-    await connectToDatabase();
     keepAlive();
 });
 
@@ -395,9 +382,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         });
     }
 });
-
-// الاتصال بقاعدة البيانات قبل تسجيل دخول البوت
-connectDB();
 
 // تسجيل الدخول باستخدام التوكن من ملف .env
 client.login(process.env.TOKEN)
