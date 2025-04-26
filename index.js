@@ -8,7 +8,6 @@ const keepAlive = require('./utils/keepAlive');
 const connectToDatabase = require('./utils/database');
 const logger = require('./utils/logger');
 const storage = require('./database/storage');
-const { Client: RenderClient } = require('@render/client');
 
 // الاتصال بقاعدة البيانات
 async function connectDB() {
@@ -30,11 +29,6 @@ const client = new Client({
         GatewayIntentBits.GuildMessageReactions
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
-});
-
-// تهيئة عميل Render
-const render = new RenderClient({
-    apiKey: process.env.RENDER_API_KEY
 });
 
 // تخزين الأوامر
