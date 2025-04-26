@@ -24,6 +24,20 @@ const settingsSchema = new mongoose.Schema({
             type: String
         }
     },
+    embeds: [{
+        title: {
+            type: String,
+            required: true
+        },
+        description: {
+            type: String,
+            required: true
+        },
+        color: {
+            type: String,
+            required: true
+        }
+    }],
     gifChannels: {
         type: [String],
         default: []
